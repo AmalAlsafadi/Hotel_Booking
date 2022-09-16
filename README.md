@@ -16,4 +16,4 @@ THe questions that were invistigated are:
    4. Is Hotel revenue growing by year? 
    5. Should we increase car parking spaces?
    
-   <img src="/Images/Hotel_Booking.png" alt="Hotel_Booking" width="300"/>
+   <img src="/Hotel_Booking.png" alt="Hotel_Booking" width="300"/>
