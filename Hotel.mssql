@@ -1,0 +1,200 @@
+/* 
+Hotel Booking Demand Datasets
+*/
+/* This data set contains booking information for a city hotel and a resort hotel, and includes information 
+such as when the booking was made, length of stay, the number of adults, children, and/or babies, and the 
+number of available parking spaces, among other things. */
+
+-- Step 1: Import Data
+-- To imprt CSV file to POSTGRESQL we have to create a new table with the same structure as the csv file.
+CREATE TABLE IF NOT EXISTS hoteldata2018
+(
+    hotel text,
+    is_canceled bigint,
+    lead_time bigint,
+    arrival_date_year text,
+    arrival_date_month text,
+    arrival_date_week_number bigint,
+    arrival_date_day_of_month bigint,
+    stays_in_weekend_nights bigint,
+    stays_in_week_nights bigint,
+    adults bigint,
+    children text,
+    babies bigint,
+    meal text,
+    country text,
+    market_segment text,
+    distribution_channel text,
+    is_repeated_guest bigint,
+    previous_cancellations bigint,
+    previous_bookings_not_canceled bigint,
+    reserved_room_type text,
+    assigned_room_type text,
+    booking_changes bigint,
+    deposit_type text,
+    agent text,
+    company text,
+    days_in_waiting_list bigint,
+    customer_type text,
+    adr numeric,
+    required_car_parking_spaces bigint,
+    total_of_special_requests bigint,
+    reservation_status text,
+    reservation_status_date date
+)
+
+-- create another 2 tables for year 2019, 2019 with the same structure
+CREATE TABLE HotelData2019 IF NOT EXISTS AS SELECT * FROM "hoteldata2018";
+CREATE TABLE HotelData2020 IF NOT EXISTS AS SELECT * FROM "hoteldata2018";
+
+-- create table for meal_cost file
+CREATE TABLE IF NOT EXISTS meal_cost
+(
+    cost numeric,
+    meal text 
+);
+
+-- create table for market_segment file
+CREATE TABLE IF NOT EXISTS market_segment
+(
+    discount numeric,
+    market_segment text
+)
+
+/* now we import the data using PSQL tools, use the following queries:
+
+ \copy "hoteldata2018" From '/Users/amalalsafadi/Desktop/Hotel/2018_table.csv' DELIMITER ',' CSV HEADER;
+ \copy "hoteldata2019" From '/Users/amalalsafadi/Desktop/Hotel/2019_table.csv' DELIMITER ',' CSV HEADER;
+ \copy "hoteldata2020" From '/Users/amalalsafadi/Desktop/Hotel/2020_table.csv' DELIMITER ',' CSV HEADER;
+ \copy "meal_cost" From '/Users/amalalsafadi/Desktop/Hotel/meal_cost.csv' DELIMITER ',' CSV HEADER;
+ \copy "market_segment" From '/Users/amalalsafadi/Desktop/Hotel/market_segment.csv' DELIMITER ',' CSV HEADER;
+
+*/
+
+-------------------------------------------------------------------------------------------------------------------
+
+/* Here we want to union data of three tables to have one big data file has all the three year information, 
+   This way it wil be easier to clean all data together
+*/
+
+-- create new table for full data 
+
+CREATE TABLE "Full_Data" AS
+
+with full_hotel as 
+(
+select * from hoteldata2018
+UNION
+select * from hoteldata2019
+UNION
+select * from hoteldata2020
+)
+
+select *
+from full_hotel
+
+select * from "Full_Data"
+----------------------------------------------------------------------------------------------------------------
+
+-- Step 2: Data Cleaning:
+
+-- By looking at the data, we notice some values has NULL as text not as empty values.
+
+-- replace text 'null' with 0
+update "Full_Data" set agent = 0 where agent = 'NULL'
+
+update "Full_Data" set company = 0 where company = 'NULL'
+
+-- replace NA with 0
+update "Full_Data" set children = 0 where children = 'NA'
+
+-- convert children data type from text to bigint
+ALTER TABLE "Full_Data" ALTER COLUMN children Type bigint USING (children::bigint)
+
+
+-- There is 195 rows that have 0 adults and children and babies, so we will remove these rows
+Delete  from "Full_Data"
+where adults = 0
+AND children = 0
+AND babies = 0
+
+-- Generate a column for arrival date
+
+ALTER TABLE "Full_Data" ADD COLUMN arrival_date date
+
+update "Full_Data" 
+set arrival_date = to_date(CONCAT(arrival_date_year, ' ', arrival_date_month, ' ', arrival_date_day_of_month),'YYYY Month DD')
+
+-------------------------------------------------------------------------------------------------------
+-- Step 3: Getting Insights from the data
+
+-- Q1: What is the booking distribution for both hotels
+
+WITH distribution AS
+(
+	SELECT hotel, 
+           COUNT(*) AS booking_by_hotel,
+          (SELECT   COUNT(*) AS total_booking FROM "Full_Data" )
+    FROM "Full_Data" 
+    GROUP BY hotel
+)  
+
+SELECT hotel, booking_by_hotel, total_booking, round(booking_by_hotel *100.00 / total_booking , 2) as percent
+FROM distribution
+ 
+-- Q2: What is the booking distribution for both hotels per year
+
+WITH distribution_per_year AS
+(
+	SELECT hotel, arrival_date_year,
+           COUNT(*) AS booking_by_hotel, 
+          (SELECT   COUNT(*) AS total_booking FROM "Full_Data" )
+    FROM "Full_Data" 
+    GROUP BY hotel, arrival_date_year
+)  
+
+SELECT hotel, arrival_date_year, booking_by_hotel, total_booking, round(booking_by_hotel *100.00 / total_booking , 2) as percent
+FROM distribution_per_year
+---------------------------------------------------------------------------------------------------------------------------------
+
+--Q3 Find the countries that has the maximum and minimum number of guests
+
+SELECT country, COUNT(adults)+COUNT(children)+COUNT(babies) AS no_of_guests
+FROM "Full_Data"
+WHERE is_canceled = 0
+GROUP BY country
+ORDER BY no_of_guests DESC
+
+--Q4 Find the country that has most cancellation.
+WITH cancelation AS
+(
+SELECT country, COUNT(is_canceled) as cancellation_count, 
+       (SELECT   COUNT(*) AS canceled_booking FROM "Full_Data"  WHERE is_canceled = 1)
+FROM "Full_Data"
+WHERE is_canceled = 1
+GROUP BY country
+) 
+SELECT country, cancellation_count, round(cancellation_count * 100.00 / canceled_booking , 2) as percent1
+FROM cancelation
+ORDER BY percent1 DESC
+-------------------------------------------------------------------------------------------------------------
+-- Q5 Is Hotel revenue growing by year? 
+
+select arrival_date_year, arrival_date_month, hotel, round(sum((stays_in_weekend_nights + stays_in_week_nights )* adr),2) as revenue
+from "Full_Data"
+group by arrival_date_month, arrival_date_year, hotel
+order by arrival_date_year, arrival_date_month
+
+
+-- Here is contineous overview of the revenue growing daily from July 2018 TO August 2020
+select arrival_date, hotel, round(sum((stays_in_weekend_nights + stays_in_week_nights )* adr),2) as revenue
+from "Full_Data"
+group by arrival_date, hotel
+order by hotel, arrival_date
+
+-----------------------------------------------------------------------------------------------------------------
+-- Q6 Should we increase car parking spaces?
+
+select   arrival_date_year, sum(required_car_parking_spaces),  round(sum(required_car_parking_spaces)/sum(stays_in_weekend_nights + stays_in_week_nights )*100.00,2) as rquired_parking_percentage
+from "Full_Data"
+group by  arrival_date_year
