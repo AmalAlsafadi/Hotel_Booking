@@ -1,8 +1,8 @@
 # Hotel_Booking
 
- In this project I use POSTGRESQL to import, clean, prep data and answer some of stackholders questions.
+ In this project I used POSTGRESQL to import, clean, prep data and answer some of stackholders questions.
 
-This data set contains booking information for a city hotel and a resort hotel, and includes information 
+This dataset contains booking information for a city hotel and a resort hotel, and includes information 
 such as when the booking was made, length of stay, the number of adults, children, and/or babies, and the 
 number of available parking spaces, among other things.
 
